@@ -12054,3 +12054,7 @@ msgstr "الموعد"
 #: hrms/hr/doctype/interview/interview_interviewer_notification.html
 msgid "Open Interview {0}"
 msgstr "فتح المقابلة {0}"
+
+#: hrms/hr/doctype/interview/interview.py
+msgid "Cancelled Interviews cannot be rescheduled."
+msgstr "لا يمكن إعادة جدولة المقابلات الملغاة."

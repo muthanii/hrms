@@ -8,7 +8,16 @@ import frappe
 from frappe import _
 from frappe.core.doctype.user_permission.test_user_permission import create_user
 from frappe.permissions import add_user_permission
-from frappe.utils import add_days, get_datetime, get_time, getdate, nowtime
+from frappe.utils import (
+	add_days,
+	format_time,
+	formatdate,
+	get_datetime,
+	get_time,
+	get_url_to_form,
+	getdate,
+	nowtime,
+)
 
 from erpnext.setup.doctype.designation.test_designation import create_designation
 from erpnext.setup.doctype.employee.test_employee import make_employee
@@ -236,6 +245,34 @@ class TestInterview(HRMSTestSuite):
 		self.assertEqual(mails[0], set(INTERVIEWERS))
 		self.assertNotIn(job_applicant.email_id, mails[0])
 
+		body = get_interview_mail_body(interview.name, "Interview Scheduled:")
+		for expected in (
+			job_applicant.applicant_name,
+			interview.interview_type,
+			formatdate(interview.scheduled_on),
+			format_time(interview.from_time),
+			format_time(interview.to_time),
+			get_url_to_form("Interview", interview.name),
+		):
+			self.assertIn(expected, body)
+
+	def test_cancelled_interview_cannot_be_rescheduled(self):
+		job_applicant = create_job_applicant()
+		enable_interviewer_notifications(self)
+		interview = create_interview_and_dependencies(job_applicant.name, scheduled_on=add_days(getdate(), 1))
+		interview.status = "Cancelled"
+		interview.save()
+		frappe.db.delete("Email Queue")
+
+		self.assertRaises(
+			frappe.ValidationError,
+			interview.reschedule_interview,
+			add_days(getdate(), 2),
+			from_time="11:00:00",
+			to_time="12:00:00",
+		)
+		self.assertFalse(frappe.get_all("Email Queue", filters={"reference_name": interview.name}))
+
 	def test_interviewers_notified_on_rescheduling(self):
 		job_applicant = create_job_applicant()
 		enable_interviewer_notifications(self)
@@ -330,6 +367,27 @@ def get_interview_mails(interview: str, subject: str) -> list[set[str]]:
 		set(frappe.get_all("Email Queue Recipient", filters={"parent": queue}, pluck="recipient"))
 		for queue in queues
 	]
+
+
+def get_interview_mail_body(interview: str, subject: str) -> str:
+	"""Decoded HTML body of the queued mail for the interview whose subject contains `subject`."""
+	from email import message_from_string
+
+	message = frappe.db.get_value(
+		"Email Queue",
+		{
+			"reference_doctype": "Interview",
+			"reference_name": interview,
+			"message": ("like", f"%Subject: {subject}%"),
+		},
+		"message",
+	)
+	parts = message_from_string(message).walk()
+	return "".join(
+		part.get_payload(decode=True).decode(part.get_content_charset() or "utf-8")
+		for part in parts
+		if part.get_content_type() == "text/html"
+	)
 
 
 def create_interview_and_dependencies(
