@@ -149,8 +149,8 @@ class Interview(Document):
 		recipients = get_recipients(self.name)
 		if is_interviewer_notification_enabled():
 			# interviewers get their own detailed mail; the generic one goes to the applicant only
-			interviewers = set(get_interviewers_to_notify(self))
-			recipients = [r for r in recipients if r and r not in interviewers]
+			applicant_email = frappe.db.get_value("Job Applicant", self.job_applicant, "email_id")
+			recipients = [applicant_email] if applicant_email else []
 			self.notify_interviewers(
 				"Rescheduled",
 				previous_slot={
@@ -262,8 +262,18 @@ def is_interviewer_notification_enabled() -> bool:
 
 
 def get_interviewers_to_notify(interview) -> list[str]:
-	"""Unique interviewers of the interview, in table order. Excludes the Job Applicant."""
-	return list(dict.fromkeys(d.interviewer for d in interview.interview_details if d.interviewer))
+	"""Email addresses of the interview's interviewers, unique and in table order.
+
+	`Interview Detail.interviewer` links to a User, whose name is not always its email
+	(e.g. Administrator, or a user whose email changed), so resolve it via the User record."""
+	users = list(dict.fromkeys(d.interviewer for d in interview.interview_details if d.interviewer))
+	if not users:
+		return []
+
+	emails = dict(
+		frappe.get_all("User", filters={"name": ("in", users)}, fields=["name", "email"], as_list=True)
+	)
+	return list(dict.fromkeys(emails[user] for user in users if emails.get(user)))
 
 
 @frappe.whitelist()
