@@ -122,41 +122,46 @@ class TestEmployeeReminders(HRMSTestSuite):
 		email_queue = frappe.qb.from_("Email Queue").select("*").run(as_dict=True)
 		self.assertTrue("Subject: Birthday Reminder" in email_queue[0].message)
 
-	def test_birthday_reminder_time(self):
+	def test_reminder_time(self):
 		from datetime import datetime
 
-		from hrms.controllers.employee_reminders import is_birthday_reminder_due
+		from hrms.controllers.employee_reminders import is_reminder_due
 
-		frappe.db.set_single_value("HR Settings", "birthday_reminder_time", "09:00:00")
-		self.assertFalse(is_birthday_reminder_due(datetime(2026, 1, 1, 8, 59)))
-		self.assertTrue(is_birthday_reminder_due(datetime(2026, 1, 1, 9, 30)))
+		frappe.db.set_single_value("HR Settings", "reminder_time", "09:00:00")
+		self.assertFalse(is_reminder_due(datetime(2026, 1, 1, 8, 59)))
+		self.assertTrue(is_reminder_due(datetime(2026, 1, 1, 9, 30)))
 		# a late hourly run still counts as due
-		self.assertTrue(is_birthday_reminder_due(datetime(2026, 1, 1, 11, 0)))
+		self.assertTrue(is_reminder_due(datetime(2026, 1, 1, 11, 0)))
 
 		# unset falls back to midnight, the previous behaviour
-		frappe.db.set_single_value("HR Settings", "birthday_reminder_time", None)
-		self.assertTrue(is_birthday_reminder_due(datetime(2026, 1, 1, 0, 15)))
+		frappe.db.set_single_value("HR Settings", "reminder_time", None)
+		self.assertTrue(is_reminder_due(datetime(2026, 1, 1, 0, 15)))
 
-	def test_birthday_reminders_sent_once_a_day(self):
+	def test_daily_reminders_sent_once_a_day(self):
 		from datetime import datetime
 		from unittest.mock import patch
 
 		from hrms.controllers import employee_reminders
 
-		frappe.db.set_single_value("HR Settings", "birthday_reminder_time", "09:00:00")
-		frappe.db.set_default(employee_reminders.BIRTHDAY_REMINDERS_LAST_SENT_KEY, "2025-12-31")
+		frappe.db.set_single_value("HR Settings", "reminder_time", "09:00:00")
+		for key in (
+			employee_reminders.BIRTHDAY_REMINDERS_LAST_SENT_KEY,
+			employee_reminders.WORK_ANNIVERSARY_REMINDERS_LAST_SENT_KEY,
+		):
+			frappe.db.set_default(key, "2025-12-31")
 
 		def run_at(hour):
 			with (
 				patch.object(employee_reminders, "now_datetime", return_value=datetime(2026, 1, 1, hour)),
-				patch.object(employee_reminders, "send_birthday_reminders") as send,
+				patch.object(employee_reminders, "send_birthday_reminders") as birthdays,
+				patch.object(employee_reminders, "send_work_anniversary_reminders") as anniversaries,
 			):
-				employee_reminders.send_birthday_reminders_at_configured_time()
-				return send.call_count
+				employee_reminders.send_daily_reminders_at_configured_time()
+				return birthdays.call_count, anniversaries.call_count
 
-		self.assertEqual(run_at(8), 0)  # before the configured time
-		self.assertEqual(run_at(10), 1)  # 9:00 run was missed; the next run sends
-		self.assertEqual(run_at(11), 0)  # already sent today
+		self.assertEqual(run_at(8), (0, 0))  # before the configured time
+		self.assertEqual(run_at(10), (1, 1))  # 9:00 run was missed; the next run sends
+		self.assertEqual(run_at(11), (0, 0))  # already sent today
 
 	def test_work_anniversary_reminders(self):
 		from hrms.controllers.employee_reminders import (

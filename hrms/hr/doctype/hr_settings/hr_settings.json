@@ -18,7 +18,7 @@
   "column_break_11",
   "send_work_anniversary_reminders",
   "send_birthday_reminders",
-  "birthday_reminder_time",
+  "reminder_time",
   "send_holiday_reminders",
   "frequency",
   "column_break_hyec",
@@ -158,11 +158,11 @@
   },
   {
    "default": "00:00:00",
-   "depends_on": "eval:doc.send_birthday_reminders",
-   "description": "Birthday reminders are sent once a day, at the first hourly run on or after this time (system time zone)",
-   "fieldname": "birthday_reminder_time",
+   "depends_on": "eval:doc.send_birthday_reminders || doc.send_work_anniversary_reminders",
+   "description": "Birthday and work anniversary reminders are sent once a day, at the first hourly run on or after this time (system time zone)",
+   "fieldname": "reminder_time",
    "fieldtype": "Time",
-   "label": "Birthday Reminder Time"
+   "label": "Reminder Time"
   },
   {
    "fieldname": "column_break_11",

@@ -24,7 +24,6 @@ class HRSettings(Document):
 		allow_geolocation_tracking: DF.Check
 		allow_multiple_shift_assignments: DF.Check
 		auto_leave_encashment: DF.Check
-		birthday_reminder_time: DF.Time | None
 		check_vacancies: DF.Check
 		emp_created_by: DF.Literal["Naming Series", "Employee Number", "Full Name"]
 		enable_multi_currency_expense_claim: DF.Check
@@ -40,6 +39,7 @@ class HRSettings(Document):
 		prevent_self_expense_approval: DF.Check
 		prevent_self_leave_approval: DF.Check
 		remind_before: DF.Time | None
+		reminder_time: DF.Time | None
 		restrict_backdated_leave_application: DF.Check
 		retirement_age: DF.Data | None
 		role_allowed_to_create_backdated_leave_application: DF.Link | None
