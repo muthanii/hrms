@@ -24,6 +24,7 @@ class HRSettings(Document):
 		allow_geolocation_tracking: DF.Check
 		allow_multiple_shift_assignments: DF.Check
 		auto_leave_encashment: DF.Check
+		birthday_reminder_time: DF.Time | None
 		check_vacancies: DF.Check
 		emp_created_by: DF.Literal["Naming Series", "Employee Number", "Full Name"]
 		enable_multi_currency_expense_claim: DF.Check

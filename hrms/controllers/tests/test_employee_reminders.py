@@ -122,6 +122,20 @@ class TestEmployeeReminders(HRMSTestSuite):
 		email_queue = frappe.qb.from_("Email Queue").select("*").run(as_dict=True)
 		self.assertTrue("Subject: Birthday Reminder" in email_queue[0].message)
 
+	def test_birthday_reminder_time(self):
+		from datetime import datetime
+
+		from hrms.controllers.employee_reminders import is_birthday_reminder_hour
+
+		frappe.db.set_single_value("HR Settings", "birthday_reminder_time", "09:00:00")
+		self.assertTrue(is_birthday_reminder_hour(datetime(2026, 1, 1, 9, 30)))
+		self.assertFalse(is_birthday_reminder_hour(datetime(2026, 1, 1, 0, 0)))
+
+		# unset falls back to midnight, the previous behaviour
+		frappe.db.set_single_value("HR Settings", "birthday_reminder_time", None)
+		self.assertTrue(is_birthday_reminder_hour(datetime(2026, 1, 1, 0, 15)))
+		self.assertFalse(is_birthday_reminder_hour(datetime(2026, 1, 1, 9, 0)))
+
 	def test_work_anniversary_reminders(self):
 		from hrms.controllers.employee_reminders import (
 			get_employees_having_an_event_today,

@@ -5,7 +5,7 @@ import frappe
 from frappe import _
 from frappe.query_builder import DatePart
 from frappe.query_builder.functions import Extract
-from frappe.utils import add_days, add_months, comma_sep, getdate
+from frappe.utils import add_days, add_months, comma_sep, get_time, getdate, now_datetime
 
 from erpnext.setup.doctype.employee.employee import get_all_employee_emails, get_employee_email
 
@@ -86,6 +86,18 @@ def send_holidays_reminder_in_advance(employee, holidays):
 # ------------------
 # BIRTHDAY REMINDERS
 # ------------------
+def send_birthday_reminders_at_configured_time():
+	"""Runs hourly; sends birthday reminders only during the hour set in HR Settings."""
+	if is_birthday_reminder_hour():
+		send_birthday_reminders()
+
+
+def is_birthday_reminder_hour(now=None) -> bool:
+	reminder_time = frappe.db.get_single_value("HR Settings", "birthday_reminder_time") or "00:00:00"
+	now = now or now_datetime()
+	return now.hour == get_time(reminder_time).hour
+
+
 def send_birthday_reminders():
 	"""Send Employee birthday reminders if no 'Stop Birthday Reminders' is not set."""
 
