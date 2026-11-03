@@ -39,6 +39,7 @@ class HRSettings(Document):
 		prevent_self_expense_approval: DF.Check
 		prevent_self_leave_approval: DF.Check
 		remind_before: DF.Time | None
+		reminder_time: DF.Time | None
 		restrict_backdated_leave_application: DF.Check
 		retirement_age: DF.Data | None
 		role_allowed_to_create_backdated_leave_application: DF.Link | None
