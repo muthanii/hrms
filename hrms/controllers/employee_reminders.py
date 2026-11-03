@@ -97,32 +97,42 @@ def send_daily_reminders_at_configured_time():
 	if not is_reminder_due(now):
 		return
 
-	send_once_today(BIRTHDAY_REMINDERS_LAST_SENT_KEY, send_birthday_reminders, now)
-	send_once_today(WORK_ANNIVERSARY_REMINDERS_LAST_SENT_KEY, send_work_anniversary_reminders, now)
+	# use one date for both the sent-date record and the employee query, so a run that
+	# crosses midnight neither mixes up days nor sends the next day's reminders twice
+	today = now.date()
+	send_once_today(BIRTHDAY_REMINDERS_LAST_SENT_KEY, send_birthday_reminders, today)
+	send_once_today(WORK_ANNIVERSARY_REMINDERS_LAST_SENT_KEY, send_work_anniversary_reminders, today)
 
 
-def send_once_today(last_sent_key: str, send, now=None):
-	"""Call `send` unless it was already called today, as recorded under `last_sent_key`."""
-	today = str((now or now_datetime()).date())
-	if frappe.db.get_default(last_sent_key) == today:
+def send_once_today(last_sent_key: str, send, today):
+	"""Call `send(today)` unless it was already done for `today`, as recorded under `last_sent_key`.
+
+	A failure is logged and rolled back to before the attempt, so it does not stop the other
+	reminder type and is retried on the next hourly run."""
+	if frappe.db.get_default(last_sent_key) == str(today):
 		return
 
-	# mark before sending so a failure part-way through does not resend to everyone next hour
-	frappe.db.set_default(last_sent_key, today)
-	send()
+	savepoint = f"send_{last_sent_key}"
+	frappe.db.savepoint(savepoint)
+	try:
+		frappe.db.set_default(last_sent_key, str(today))
+		send(today)
+	except Exception:
+		frappe.db.rollback(save_point=savepoint)
+		frappe.log_error(title=f"Failed to send reminders ({last_sent_key})")
 
 
 def is_reminder_due(now=None) -> bool:
-	"""Return True once the current hour has reached the configured reminder hour."""
+	"""Return True once the current time has reached the configured Reminder Time."""
 	reminder_time = frappe.db.get_single_value("HR Settings", "reminder_time") or "00:00:00"
 	now = now or now_datetime()
-	return now.hour >= get_time(reminder_time).hour
+	return now.time() >= get_time(reminder_time)
 
 
 # ------------------
 # BIRTHDAY REMINDERS
 # ------------------
-def send_birthday_reminders():
+def send_birthday_reminders(date=None):
 	"""Send Employee birthday reminders if no 'Stop Birthday Reminders' is not set."""
 
 	to_send = int(frappe.db.get_single_value("HR Settings", "send_birthday_reminders"))
@@ -130,7 +140,7 @@ def send_birthday_reminders():
 		return
 
 	sender = get_sender_email()
-	employees_born_today = get_employees_who_are_born_today()
+	employees_born_today = get_employees_who_are_born_today(date)
 
 	for company, birthday_persons in employees_born_today.items():
 		employee_emails = get_all_employee_emails(company)
@@ -180,12 +190,12 @@ def send_birthday_reminder(recipients, reminder_text, birthday_persons, message,
 	)
 
 
-def get_employees_who_are_born_today():
-	"""Get all employee born today & group them based on their company"""
-	return get_employees_having_an_event_today("birthday")
+def get_employees_who_are_born_today(date=None):
+	"""Get all employee born today (or on `date`) & group them based on their company"""
+	return get_employees_having_an_event_today("birthday", date)
 
 
-def get_employees_having_an_event_today(event_type):
+def get_employees_having_an_event_today(event_type, date=None):
 	"""Get all employee who have `event_type` today
 	& group them based on their company. `event_type`
 	can be `birthday` or `work_anniversary`"""
@@ -200,7 +210,7 @@ def get_employees_having_an_event_today(event_type):
 	else:
 		return
 
-	today_date = getdate()
+	today_date = getdate(date)
 	Employee = frappe.qb.DocType("Employee")
 	event_date = Employee[condition_column]
 
@@ -234,14 +244,14 @@ def get_employees_having_an_event_today(event_type):
 # --------------------------
 # WORK ANNIVERSARY REMINDERS
 # --------------------------
-def send_work_anniversary_reminders():
+def send_work_anniversary_reminders(date=None):
 	"""Send Employee Work Anniversary Reminders if 'Send Work Anniversary Reminders' is checked"""
 	to_send = int(frappe.db.get_single_value("HR Settings", "send_work_anniversary_reminders"))
 	if not to_send:
 		return
 
 	sender = get_sender_email()
-	employees_joined_today = get_employees_having_an_event_today("work_anniversary")
+	employees_joined_today = get_employees_having_an_event_today("work_anniversary", date)
 
 	message = _("A friendly reminder of an important date for our team.")
 	message += "<br>"

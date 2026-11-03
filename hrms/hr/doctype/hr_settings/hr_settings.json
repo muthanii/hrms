@@ -159,7 +159,7 @@
   {
    "default": "00:00:00",
    "depends_on": "eval:doc.send_birthday_reminders || doc.send_work_anniversary_reminders",
-   "description": "Birthday and work anniversary reminders are sent once a day, at the first hourly run on or after this time (system time zone)",
+   "description": "Birthday and work anniversary reminders are sent once a day, at the first hourly check on or after this time (system time zone)",
    "fieldname": "reminder_time",
    "fieldtype": "Time",
    "label": "Reminder Time"
