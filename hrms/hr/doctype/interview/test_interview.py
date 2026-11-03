@@ -8,7 +8,16 @@ import frappe
 from frappe import _
 from frappe.core.doctype.user_permission.test_user_permission import create_user
 from frappe.permissions import add_user_permission
-from frappe.utils import add_days, get_datetime, get_time, getdate, nowtime
+from frappe.utils import (
+	add_days,
+	format_time,
+	formatdate,
+	get_datetime,
+	get_time,
+	get_url_to_form,
+	getdate,
+	nowtime,
+)
 
 from erpnext.setup.doctype.designation.test_designation import create_designation
 from erpnext.setup.doctype.employee.test_employee import make_employee
@@ -220,6 +229,108 @@ class TestInterview(HRMSTestSuite):
 
 		self.assertEqual(interview.status, "Cancelled")
 
+	def test_interviewers_notified_on_scheduling(self):
+		job_applicant = create_job_applicant()
+		frappe.db.delete("Email Queue")
+
+		# disabled by default: nothing is sent
+		interview = create_interview_and_dependencies(job_applicant.name)
+		self.assertFalse(get_interview_mails(interview.name, "Interview Scheduled:"))
+
+		enable_interviewer_notifications(self)
+		interview = create_interview_and_dependencies(job_applicant.name, scheduled_on=add_days(getdate(), 1))
+
+		mails = get_interview_mails(interview.name, "Interview Scheduled:")
+		self.assertEqual(len(mails), 1)
+		self.assertEqual(mails[0], set(INTERVIEWERS))
+		self.assertNotIn(job_applicant.email_id, mails[0])
+
+		body = get_interview_mail_body(interview.name, "Interview Scheduled:")
+		for expected in (
+			job_applicant.applicant_name,
+			interview.interview_type,
+			formatdate(interview.scheduled_on),
+			format_time(interview.from_time),
+			format_time(interview.to_time),
+			get_url_to_form("Interview", interview.name),
+		):
+			self.assertIn(expected, body)
+
+	def test_cancelled_interview_cannot_be_rescheduled(self):
+		job_applicant = create_job_applicant()
+		enable_interviewer_notifications(self)
+		interview = create_interview_and_dependencies(job_applicant.name, scheduled_on=add_days(getdate(), 1))
+		interview.status = "Cancelled"
+		interview.save()
+		frappe.db.delete("Email Queue")
+
+		self.assertRaises(
+			frappe.ValidationError,
+			interview.reschedule_interview,
+			add_days(getdate(), 2),
+			from_time="11:00:00",
+			to_time="12:00:00",
+		)
+		self.assertFalse(frappe.get_all("Email Queue", filters={"reference_name": interview.name}))
+
+	def test_interviewers_notified_on_rescheduling(self):
+		job_applicant = create_job_applicant()
+		enable_interviewer_notifications(self)
+		interview = create_interview_and_dependencies(
+			job_applicant.name, scheduled_on=add_days(getdate(), 1), from_time="10:00:00", to_time="11:00:00"
+		)
+		frappe.db.delete("Email Queue")
+
+		interview.reschedule_interview(add_days(getdate(), 2), from_time="11:00:00", to_time="12:00:00")
+
+		mails = get_interview_mails(interview.name, "Interview Rescheduled:")
+		self.assertEqual(len(mails), 1)
+		self.assertEqual(mails[0], set(INTERVIEWERS))
+
+		# the generic reschedule mail still reaches the applicant, but not the interviewers
+		applicant_mails = get_interview_mails(interview.name, f"Interview: {interview.name} Rescheduled")
+		self.assertEqual(applicant_mails, [{job_applicant.email_id}])
+
+	def test_interviewers_notified_on_cancellation(self):
+		job_applicant = create_job_applicant()
+		enable_interviewer_notifications(self)
+
+		interview = create_interview_and_dependencies(job_applicant.name, scheduled_on=add_days(getdate(), 1))
+		frappe.db.delete("Email Queue")
+		interview.status = "Cancelled"
+		interview.save()
+
+		mails = get_interview_mails(interview.name, "Interview Cancelled:")
+		self.assertEqual(mails, [set(INTERVIEWERS)])
+
+		# saving an already cancelled interview does not mail again
+		interview.interview_summary = "Candidate withdrew"
+		interview.save()
+		self.assertEqual(len(get_interview_mails(interview.name, "Interview Cancelled:")), 1)
+
+	def test_interviewers_notified_on_discard(self):
+		job_applicant = create_job_applicant()
+		enable_interviewer_notifications(self)
+
+		interview = create_interview_and_dependencies(job_applicant.name, scheduled_on=add_days(getdate(), 1))
+		frappe.db.delete("Email Queue")
+		interview.discard()
+
+		self.assertEqual(get_interview_mails(interview.name, "Interview Cancelled:"), [set(INTERVIEWERS)])
+
+	def test_unrelated_edit_does_not_notify_interviewers(self):
+		job_applicant = create_job_applicant()
+		enable_interviewer_notifications(self)
+
+		interview = create_interview_and_dependencies(job_applicant.name, scheduled_on=add_days(getdate(), 1))
+		frappe.db.delete("Email Queue")
+
+		interview.interview_summary = "Strong on fundamentals"
+		interview.status = "Under Review"
+		interview.save()
+
+		self.assertFalse(frappe.get_all("Email Queue", filters={"reference_name": interview.name}))
+
 	def test_update_job_applicant_status_invalid_input(self):
 		# Ensure passing empty or non-existent job applicant string does not raise AttributeError
 		try:
@@ -231,6 +342,52 @@ class TestInterview(HRMSTestSuite):
 			update_job_applicant_status("Accepted", "NON_EXISTENT_JOB_APPLICANT")
 		except AttributeError:
 			self.fail("update_job_applicant_status raised AttributeError on invalid job applicant ID")
+
+
+INTERVIEWERS = ("test_interviewer1@example.com", "test_interviewer2@example.com")
+
+
+def enable_interviewer_notifications(test_case):
+	frappe.db.set_single_value("HR Settings", "notify_interviewers_on_schedule", 1)
+	test_case.addCleanup(frappe.db.set_single_value, "HR Settings", "notify_interviewers_on_schedule", 0)
+
+
+def get_interview_mails(interview: str, subject: str) -> list[set[str]]:
+	"""Recipients of each queued mail for the interview whose subject contains `subject`."""
+	queues = frappe.get_all(
+		"Email Queue",
+		filters={
+			"reference_doctype": "Interview",
+			"reference_name": interview,
+			"message": ("like", f"%Subject: {subject}%"),
+		},
+		pluck="name",
+	)
+	return [
+		set(frappe.get_all("Email Queue Recipient", filters={"parent": queue}, pluck="recipient"))
+		for queue in queues
+	]
+
+
+def get_interview_mail_body(interview: str, subject: str) -> str:
+	"""Decoded HTML body of the queued mail for the interview whose subject contains `subject`."""
+	from email import message_from_string
+
+	message = frappe.db.get_value(
+		"Email Queue",
+		{
+			"reference_doctype": "Interview",
+			"reference_name": interview,
+			"message": ("like", f"%Subject: {subject}%"),
+		},
+		"message",
+	)
+	parts = message_from_string(message).walk()
+	return "".join(
+		part.get_payload(decode=True).decode(part.get_content_charset() or "utf-8")
+		for part in parts
+		if part.get_content_type() == "text/html"
+	)
 
 
 def create_interview_and_dependencies(

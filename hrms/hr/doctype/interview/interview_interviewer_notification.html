@@ -1,0 +1,38 @@
+<p>
+	{% if event == "Scheduled" %}
+	{{ _("You have been added as an interviewer for the following interview.") }}
+	{% elif event == "Rescheduled" %}
+	{{ _("The following interview has been rescheduled.") }}
+	{% else %}
+	{{ _("The following interview has been cancelled.") }}
+	{% endif %}
+</p>
+
+<table cellpadding="4" cellspacing="0" style="border-collapse: collapse;">
+	<tr>
+		<td><b>{{ _("Job Applicant") }}</b></td>
+		<td>{{ applicant_name | e }}</td>
+	</tr>
+	{% if job_opening %}
+	<tr>
+		<td><b>{{ _("Job Opening") }}</b></td>
+		<td>{{ job_opening | e }}</td>
+	</tr>
+	{% endif %}
+	<tr>
+		<td><b>{{ _("Interview Round") }}</b></td>
+		<td>{{ interview_round | e }}</td>
+	</tr>
+	{% if event == "Rescheduled" %}
+	<tr>
+		<td><b>{{ _("Previous Schedule") }}</b></td>
+		<td><s>{{ previous_scheduled_on }}, {{ previous_from_time }} - {{ previous_to_time }}</s></td>
+	</tr>
+	{% endif %}
+	<tr>
+		<td><b>{% if event == "Rescheduled" %}{{ _("New Schedule") }}{% else %}{{ _("Schedule") }}{% endif %}</b></td>
+		<td>{{ scheduled_on }}, {{ from_time }} - {{ to_time }}</td>
+	</tr>
+</table>
+
+<p><a href="{{ interview_link }}">{{ _("Open Interview {0}").format(interview) }}</a></p>
