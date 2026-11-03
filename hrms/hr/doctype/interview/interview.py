@@ -8,7 +8,17 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 from frappe.query_builder.functions import Avg
-from frappe.utils import cint, cstr, get_datetime, get_link_to_form, getdate, nowtime
+from frappe.utils import (
+	cint,
+	cstr,
+	format_time,
+	formatdate,
+	get_datetime,
+	get_link_to_form,
+	get_url_to_form,
+	getdate,
+	nowtime,
+)
 
 
 class DuplicateInterviewRoundError(frappe.ValidationError):
@@ -46,6 +56,18 @@ class Interview(Document):
 	def validate(self):
 		self.validate_duplicate_interview()
 		self.validate_designation()
+
+	def after_insert(self):
+		if self.status != "Cancelled":
+			self.notify_interviewers("Scheduled")
+
+	def on_update(self):
+		if self.flags.in_insert:
+			return
+
+		previous = self.get_doc_before_save()
+		if previous and previous.status != "Cancelled" and self.status == "Cancelled":
+			self.notify_interviewers("Cancelled")
 
 	def on_submit(self):
 		if self.status not in ["Cleared", "Rejected"]:
@@ -125,22 +147,37 @@ class Interview(Document):
 		self.notify_update()
 
 		recipients = get_recipients(self.name)
+		if is_interviewer_notification_enabled():
+			# interviewers get their own detailed mail; the generic one goes to the applicant only
+			interviewers = set(get_interviewers_to_notify(self))
+			recipients = [r for r in recipients if r and r not in interviewers]
+			self.notify_interviewers(
+				"Rescheduled",
+				previous_slot={
+					"scheduled_on": original_date,
+					"from_time": original_from_time,
+					"to_time": original_to_time,
+				},
+			)
 
 		try:
-			frappe.sendmail(
-				recipients=recipients,
-				subject=_("Interview: {0} Rescheduled").format(self.name),
-				message=_("Your Interview session is rescheduled from {0} {1} - {2} to {3} {4} - {5}").format(
-					original_date,
-					original_from_time,
-					original_to_time,
-					self.scheduled_on,
-					self.from_time,
-					self.to_time,
-				),
-				reference_doctype=self.doctype,
-				reference_name=self.name,
-			)
+			if recipients:
+				frappe.sendmail(
+					recipients=recipients,
+					subject=_("Interview: {0} Rescheduled").format(self.name),
+					message=_(
+						"Your Interview session is rescheduled from {0} {1} - {2} to {3} {4} - {5}"
+					).format(
+						original_date,
+						original_from_time,
+						original_to_time,
+						self.scheduled_on,
+						self.from_time,
+						self.to_time,
+					),
+					reference_doctype=self.doctype,
+					reference_name=self.name,
+				)
 		except Exception:
 			frappe.msgprint(
 				_(
@@ -151,7 +188,82 @@ class Interview(Document):
 		frappe.msgprint(_("Interview Rescheduled successfully"), indicator="green")
 
 	def on_discard(self):
+		was_cancelled = self.status == "Cancelled"
 		self.db_set("status", "Cancelled")
+		if not was_cancelled:
+			self.notify_interviewers("Cancelled")
+
+	def notify_interviewers(self, event: str, previous_slot: dict | None = None) -> None:
+		"""Email the interviewers (never the applicant) that this interview was
+		scheduled, rescheduled or cancelled, if enabled in HR Settings."""
+		if not is_interviewer_notification_enabled():
+			return
+
+		recipients = get_interviewers_to_notify(self)
+		if not recipients:
+			return
+
+		subjects = {
+			"Scheduled": _("Interview Scheduled: {0} ({1})"),
+			"Rescheduled": _("Interview Rescheduled: {0} ({1})"),
+			"Cancelled": _("Interview Cancelled: {0} ({1})"),
+		}
+		applicant_name = (
+			frappe.db.get_value("Job Applicant", self.job_applicant, "applicant_name") or self.job_applicant
+		)
+		job_opening = (
+			frappe.db.get_value("Job Opening", self.job_opening, "job_title") or self.job_opening
+			if self.job_opening
+			else None
+		)
+
+		context = {
+			"event": event,
+			"interview": self.name,
+			"interview_link": get_url_to_form(self.doctype, self.name),
+			"applicant_name": applicant_name,
+			"job_opening": job_opening,
+			"interview_round": self.interview_type,
+			"scheduled_on": formatdate(self.scheduled_on),
+			"from_time": format_time(self.from_time),
+			"to_time": format_time(self.to_time),
+		}
+		if previous_slot:
+			context.update(
+				{
+					"previous_scheduled_on": formatdate(previous_slot.get("scheduled_on")),
+					"previous_from_time": format_time(previous_slot.get("from_time")),
+					"previous_to_time": format_time(previous_slot.get("to_time")),
+				}
+			)
+
+		try:
+			frappe.sendmail(
+				sender=frappe.db.get_single_value("HR Settings", "hiring_sender_email") or None,
+				recipients=recipients,
+				subject=subjects[event].format(applicant_name, self.interview_type),
+				message=frappe.render_template(
+					"hrms/hr/doctype/interview/interview_interviewer_notification.html", context
+				),
+				reference_doctype=self.doctype,
+				reference_name=self.name,
+			)
+		except Exception:
+			frappe.log_error(f"Failed to send Interview {event} notification to interviewers")
+			frappe.msgprint(
+				_("Failed to notify the interviewers. Please configure your email account."),
+				indicator="orange",
+				alert=True,
+			)
+
+
+def is_interviewer_notification_enabled() -> bool:
+	return bool(cint(frappe.db.get_single_value("HR Settings", "notify_interviewers_on_schedule")))
+
+
+def get_interviewers_to_notify(interview) -> list[str]:
+	"""Unique interviewers of the interview, in table order. Excludes the Job Applicant."""
+	return list(dict.fromkeys(d.interviewer for d in interview.interview_details if d.interviewer))
 
 
 @frappe.whitelist()

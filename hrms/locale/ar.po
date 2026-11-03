@@ -5650,7 +5650,7 @@ msgstr "يناير"
 #: hrms/hr/workspace/recruitment/recruitment.json hrms/setup.py:196
 #: hrms/workspace_sidebar/recruitment.json
 msgid "Job Applicant"
-msgstr ""
+msgstr "المتقدم للوظيفة"
 
 #. Name of a DocType
 #: hrms/hr/doctype/job_applicant_source/job_applicant_source.json
@@ -11997,3 +11997,60 @@ msgstr ""
 msgid "{} {} open for this position."
 msgstr ""
 
+#. Description of the 'Notify Interviewers on Scheduling' (Check) field in DocType 'HR Settings'
+#: hrms/hr/doctype/hr_settings/hr_settings.json
+msgid "Email the interviewers when an Interview is created, rescheduled or cancelled. The Job Applicant is not included."
+msgstr "إرسال بريد إلكتروني إلى المقابِلين عند إنشاء المقابلة أو إعادة جدولتها أو إلغائها. لا يشمل ذلك المتقدم للوظيفة."
+
+#. Label of the notify_interviewers_on_schedule (Check) field in DocType 'HR Settings'
+#: hrms/hr/doctype/hr_settings/hr_settings.json
+msgid "Notify Interviewers on Scheduling"
+msgstr "إشعار المقابِلين عند جدولة المقابلة"
+
+#: hrms/hr/doctype/interview/interview.py
+msgid "Interview Scheduled: {0} ({1})"
+msgstr "تمت جدولة مقابلة: {0} ({1})"
+
+#: hrms/hr/doctype/interview/interview.py
+msgid "Interview Rescheduled: {0} ({1})"
+msgstr "تمت إعادة جدولة مقابلة: {0} ({1})"
+
+#: hrms/hr/doctype/interview/interview.py
+msgid "Interview Cancelled: {0} ({1})"
+msgstr "تم إلغاء مقابلة: {0} ({1})"
+
+#: hrms/hr/doctype/interview/interview.py
+msgid "Failed to notify the interviewers. Please configure your email account."
+msgstr "تعذّر إشعار المقابِلين. يرجى إعداد حساب البريد الإلكتروني."
+
+#: hrms/hr/doctype/interview/interview_interviewer_notification.html
+msgid "You have been added as an interviewer for the following interview."
+msgstr "تمت إضافتك كمقابِل في المقابلة التالية."
+
+#: hrms/hr/doctype/interview/interview_interviewer_notification.html
+msgid "The following interview has been rescheduled."
+msgstr "تمت إعادة جدولة المقابلة التالية."
+
+#: hrms/hr/doctype/interview/interview_interviewer_notification.html
+msgid "The following interview has been cancelled."
+msgstr "تم إلغاء المقابلة التالية."
+
+#: hrms/hr/doctype/interview/interview_interviewer_notification.html
+msgid "Interview Round"
+msgstr "جولة المقابلة"
+
+#: hrms/hr/doctype/interview/interview_interviewer_notification.html
+msgid "Previous Schedule"
+msgstr "الموعد السابق"
+
+#: hrms/hr/doctype/interview/interview_interviewer_notification.html
+msgid "New Schedule"
+msgstr "الموعد الجديد"
+
+#: hrms/hr/doctype/interview/interview_interviewer_notification.html
+msgid "Schedule"
+msgstr "الموعد"
+
+#: hrms/hr/doctype/interview/interview_interviewer_notification.html
+msgid "Open Interview {0}"
+msgstr "فتح المقابلة {0}"

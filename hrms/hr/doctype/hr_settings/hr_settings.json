@@ -51,6 +51,7 @@
   "recruitment_tab",
   "hiring_settings_section",
   "check_vacancies",
+  "notify_interviewers_on_schedule",
   "send_interview_reminder",
   "interview_reminder_template",
   "remind_before",
@@ -158,6 +159,13 @@
   {
    "fieldname": "column_break_11",
    "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "description": "Email the interviewers when an Interview is created, rescheduled or cancelled. The Job Applicant is not included.",
+   "fieldname": "notify_interviewers_on_schedule",
+   "fieldtype": "Check",
+   "label": "Notify Interviewers on Scheduling"
   },
   {
    "default": "0",
@@ -374,7 +382,7 @@
  "issingle": 1,
  "link_display_mode": "Search",
  "links": [],
- "modified": "2026-10-27 16:22:38.481405",
+ "modified": "2026-11-03 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "HR",
  "name": "HR Settings",

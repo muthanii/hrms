@@ -36,6 +36,7 @@ class HRSettings(Document):
 		hiring_sender_email: DF.Data | None
 		interview_reminder_template: DF.Link | None
 		leave_approver_mandatory_in_leave_application: DF.Check
+		notify_interviewers_on_schedule: DF.Check
 		prevent_self_expense_approval: DF.Check
 		prevent_self_leave_approval: DF.Check
 		remind_before: DF.Time | None
