@@ -159,7 +159,7 @@
   {
    "default": "00:00:00",
    "depends_on": "eval:doc.send_birthday_reminders",
-   "description": "Birthday reminders are sent during this hour (system time zone)",
+   "description": "Birthday reminders are sent once a day, at the first hourly run on or after this time (system time zone)",
    "fieldname": "birthday_reminder_time",
    "fieldtype": "Time",
    "label": "Birthday Reminder Time"

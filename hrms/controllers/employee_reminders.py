@@ -86,16 +86,30 @@ def send_holidays_reminder_in_advance(employee, holidays):
 # ------------------
 # BIRTHDAY REMINDERS
 # ------------------
+BIRTHDAY_REMINDERS_LAST_SENT_KEY = "birthday_reminders_last_sent_on"
+
+
 def send_birthday_reminders_at_configured_time():
-	"""Runs hourly; sends birthday reminders only during the hour set in HR Settings."""
-	if is_birthday_reminder_hour():
-		send_birthday_reminders()
+	"""Runs hourly. Sends birthday reminders once a day, at the first run on or after the
+	time set in HR Settings, so a late or skipped hourly run does not lose the day's reminders."""
+	now = now_datetime()
+	today = str(now.date())
+	if frappe.db.get_default(BIRTHDAY_REMINDERS_LAST_SENT_KEY) == today:
+		return
+
+	if not is_birthday_reminder_due(now):
+		return
+
+	# mark before sending so a failure part-way through does not resend to everyone next hour
+	frappe.db.set_default(BIRTHDAY_REMINDERS_LAST_SENT_KEY, today)
+	send_birthday_reminders()
 
 
-def is_birthday_reminder_hour(now=None) -> bool:
+def is_birthday_reminder_due(now=None) -> bool:
+	"""Return True once the current hour has reached the configured birthday reminder hour."""
 	reminder_time = frappe.db.get_single_value("HR Settings", "birthday_reminder_time") or "00:00:00"
 	now = now or now_datetime()
-	return now.hour == get_time(reminder_time).hour
+	return now.hour >= get_time(reminder_time).hour
 
 
 def send_birthday_reminders():

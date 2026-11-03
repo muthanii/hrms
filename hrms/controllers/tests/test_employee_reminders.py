@@ -125,16 +125,38 @@ class TestEmployeeReminders(HRMSTestSuite):
 	def test_birthday_reminder_time(self):
 		from datetime import datetime
 
-		from hrms.controllers.employee_reminders import is_birthday_reminder_hour
+		from hrms.controllers.employee_reminders import is_birthday_reminder_due
 
 		frappe.db.set_single_value("HR Settings", "birthday_reminder_time", "09:00:00")
-		self.assertTrue(is_birthday_reminder_hour(datetime(2026, 1, 1, 9, 30)))
-		self.assertFalse(is_birthday_reminder_hour(datetime(2026, 1, 1, 0, 0)))
+		self.assertFalse(is_birthday_reminder_due(datetime(2026, 1, 1, 8, 59)))
+		self.assertTrue(is_birthday_reminder_due(datetime(2026, 1, 1, 9, 30)))
+		# a late hourly run still counts as due
+		self.assertTrue(is_birthday_reminder_due(datetime(2026, 1, 1, 11, 0)))
 
 		# unset falls back to midnight, the previous behaviour
 		frappe.db.set_single_value("HR Settings", "birthday_reminder_time", None)
-		self.assertTrue(is_birthday_reminder_hour(datetime(2026, 1, 1, 0, 15)))
-		self.assertFalse(is_birthday_reminder_hour(datetime(2026, 1, 1, 9, 0)))
+		self.assertTrue(is_birthday_reminder_due(datetime(2026, 1, 1, 0, 15)))
+
+	def test_birthday_reminders_sent_once_a_day(self):
+		from datetime import datetime
+		from unittest.mock import patch
+
+		from hrms.controllers import employee_reminders
+
+		frappe.db.set_single_value("HR Settings", "birthday_reminder_time", "09:00:00")
+		frappe.db.set_default(employee_reminders.BIRTHDAY_REMINDERS_LAST_SENT_KEY, "2025-12-31")
+
+		def run_at(hour):
+			with (
+				patch.object(employee_reminders, "now_datetime", return_value=datetime(2026, 1, 1, hour)),
+				patch.object(employee_reminders, "send_birthday_reminders") as send,
+			):
+				employee_reminders.send_birthday_reminders_at_configured_time()
+				return send.call_count
+
+		self.assertEqual(run_at(8), 0)  # before the configured time
+		self.assertEqual(run_at(10), 1)  # 9:00 run was missed; the next run sends
+		self.assertEqual(run_at(11), 0)  # already sent today
 
 	def test_work_anniversary_reminders(self):
 		from hrms.controllers.employee_reminders import (
